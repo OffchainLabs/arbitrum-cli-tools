@@ -91,7 +91,7 @@ export const decodeL2Msgs = (l2Msgs: Uint8Array): string[] => {
   const kind = l2Msgs[0];
   if (kind === L2MessageKind_SignedTx) {
     const serializedTransaction = l2Msgs.subarray(1); // remove kind tag
-    const tx = ethers.utils.parseTransaction(serializedTransaction)
+    const tx = ethers.utils.parseTransaction(serializedTransaction);
     const currentHash = tx.hash!; // calculate tx hash
     txHash.push(currentHash);
   } else if (kind === L2MessageKind_Batch) {
