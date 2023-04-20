@@ -34,6 +34,9 @@ const argv = yargs(process.argv.slice(2))
     outputFile: {
       type: 'string',
     },
+    l2NetworkId: {
+      type: 'number'
+    }
   })
   .demandOption('action')
   .parseSync();

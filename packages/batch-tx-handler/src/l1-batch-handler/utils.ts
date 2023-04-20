@@ -1,10 +1,11 @@
 import { ethers } from 'ethers';
 import brotli from 'brotli';
-import { rlp, bufArrToArr } from 'ethereumjs-util';
+import { rlp, bufArrToArr, bufferToHex, fromSigned } from 'ethereumjs-util';
 import { Decoded, Input } from 'rlp';
 import { getL2Network } from '@arbitrum/sdk';
 import { Interface } from 'ethers/lib/utils';
 import { seqFunctionAbi } from './abi';
+import fs from "fs"
 
 const MaxL2MessageSize = 256 * 1024;
 const BrotliMessageHeaderByte = 0;
@@ -25,10 +26,13 @@ export const decompressAndDecode = (compressedData: Uint8Array): Uint8Array[] =>
   //use rlp to decode stream type
   let res = rlp.decode(hexData, true) as Decoded;
   const l2Segments: Uint8Array[] = [];
+  const output: string[] = []
   while (res.remainder !== undefined) {
     l2Segments.push(bufArrToArr(res.data as Buffer));
+    output.push(bufferToHex(res.data as Buffer))
     res = rlp.decode(res.remainder as Input, true) as Decoded;
   }
+  fs.writeFileSync("tx", output.toString())
   return l2Segments;
 };
 
@@ -75,6 +79,7 @@ export const getAllL2Msgs = (l2segments: Uint8Array[]): Uint8Array[] => {
     }
     if (kind === BatchSegmentKindDelayedMessages) {
       //TODO
+      console.log("111")
     }
   }
 
@@ -114,11 +119,12 @@ export const decodeL2Msgs = (l2Msgs: Uint8Array): string[] => {
 // Get related sequencer batch data from a sequencer batch submission transaction.
 export const getRawData = async (
   sequencerTx: string,
+  l2NetworkId: number,
   provider: ethers.providers.JsonRpcProvider,
 ): Promise<Uint8Array> => {
   //Because current arbitrum-sdk doesn't support latest sequencer inbox contract, so we use ethersjs here directly.
   const contractInterface = new Interface(seqFunctionAbi);
-  const l2Network = await getL2Network(42161);
+  const l2Network = await getL2Network(l2NetworkId);
   const txReceipt = await provider.getTransactionReceipt(sequencerTx);
   const tx = await provider.getTransaction(sequencerTx);
   if (!tx || !txReceipt || (txReceipt && !txReceipt.status)) {
@@ -140,3 +146,14 @@ export const getAllStartBlockTx = () => {};
 
 //TODO: get all tx from delayed inbox in this batch
 export const getAllDelayed = () => {};
+
+// inner = &types.ArbitrumUnsignedTx{
+//   ChainId:   chainId,
+//   From:      poster,
+//   Nonce:     nonce,
+//   GasFeeCap: maxFeePerGas.Big(),
+//   Gas:       gasLimit,
+//   To:        destination,
+//   Value:     value.Big(),
+//   Data:      calldata,
+// }
