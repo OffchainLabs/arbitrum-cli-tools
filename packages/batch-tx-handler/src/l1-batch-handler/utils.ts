@@ -26,13 +26,10 @@ export const decompressAndDecode = (compressedData: Uint8Array): Uint8Array[] =>
   //use rlp to decode stream type
   let res = rlp.decode(hexData, true) as Decoded;
   const l2Segments: Uint8Array[] = [];
-  const output: string[] = []
   while (res.remainder !== undefined) {
     l2Segments.push(bufArrToArr(res.data as Buffer));
-    output.push(bufferToHex(res.data as Buffer))
     res = rlp.decode(res.remainder as Input, true) as Decoded;
   }
-  fs.writeFileSync("tx", output.toString())
   return l2Segments;
 };
 
@@ -146,14 +143,3 @@ export const getAllStartBlockTx = () => {};
 
 //TODO: get all tx from delayed inbox in this batch
 export const getAllDelayed = () => {};
-
-// inner = &types.ArbitrumUnsignedTx{
-//   ChainId:   chainId,
-//   From:      poster,
-//   Nonce:     nonce,
-//   GasFeeCap: maxFeePerGas.Big(),
-//   Gas:       gasLimit,
-//   To:        destination,
-//   Value:     value.Big(),
-//   Data:      calldata,
-// }
