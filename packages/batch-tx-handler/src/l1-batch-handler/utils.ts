@@ -114,11 +114,12 @@ export const decodeL2Msgs = (l2Msgs: Uint8Array): string[] => {
 // Get related sequencer batch data from a sequencer batch submission transaction.
 export const getRawData = async (
   sequencerTx: string,
+  l2NetworkId: number,
   provider: ethers.providers.JsonRpcProvider,
 ): Promise<Uint8Array> => {
   //Because current arbitrum-sdk doesn't support latest sequencer inbox contract, so we use ethersjs here directly.
   const contractInterface = new Interface(seqFunctionAbi);
-  const l2Network = await getL2Network(42161);
+  const l2Network = await getL2Network(l2NetworkId);
   const txReceipt = await provider.getTransactionReceipt(sequencerTx);
   const tx = await provider.getTransaction(sequencerTx);
   if (!tx || !txReceipt || (txReceipt && !txReceipt.status)) {

@@ -16,7 +16,7 @@ Add `startBlock` and delayed transaction handler.
 ### Run Demo:
 
 ```
-yarn L1BatchHandler --l1TxHash {SEQUENCER_SUBMISSION_TX} --outputFile {FILE_TO_RECORD_TXNS}
+yarn L1BatchHandler --l1TxHash {SEQUENCER_SUBMISSION_TX} --outputFile {FILE_TO_RECORD_TXNS} --l2NetworkId {L2_NETWORK_ID}
 ```
 
 ## l2 precompile handler
