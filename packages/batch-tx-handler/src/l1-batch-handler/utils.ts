@@ -1,11 +1,10 @@
 import { ethers } from 'ethers';
 import brotli from 'brotli';
-import { rlp, bufArrToArr, bufferToHex, fromSigned } from 'ethereumjs-util';
+import { rlp, bufArrToArr } from 'ethereumjs-util';
 import { Decoded, Input } from 'rlp';
 import { getL2Network } from '@arbitrum/sdk';
 import { Interface } from 'ethers/lib/utils';
 import { seqFunctionAbi } from './abi';
-import fs from "fs"
 
 const MaxL2MessageSize = 256 * 1024;
 const BrotliMessageHeaderByte = 0;
@@ -76,7 +75,6 @@ export const getAllL2Msgs = (l2segments: Uint8Array[]): Uint8Array[] => {
     }
     if (kind === BatchSegmentKindDelayedMessages) {
       //TODO
-      console.log("111")
     }
   }
 

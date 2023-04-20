@@ -35,8 +35,8 @@ const argv = yargs(process.argv.slice(2))
       type: 'string',
     },
     l2NetworkId: {
-      type: 'number'
-    }
+      type: 'number',
+    },
   })
   .demandOption('action')
   .parseSync();

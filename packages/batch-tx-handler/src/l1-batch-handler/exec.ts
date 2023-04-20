@@ -16,7 +16,7 @@ export const startL1BatchHandler = async (
   if (!args.outputFile) {
     throw new Error('No outputFile! (You should add --outputFile)');
   }
-  if(!args.l2NetworkId) {
+  if (!args.l2NetworkId) {
     throw new Error('No l2NetworkId! (You should add --l2NetworkId)');
   }
 
