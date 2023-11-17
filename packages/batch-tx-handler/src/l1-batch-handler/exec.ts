@@ -9,6 +9,9 @@ import fs from 'fs';
 import args from '../getClargs';
 import { providers } from 'ethers';
 
+export let l2NetworkId: number;
+export let l1Provider: providers.JsonRpcProvider;
+
 export const startL1BatchHandler = async (
   sequencerTx: string,
   provider: providers.JsonRpcProvider,
@@ -20,11 +23,20 @@ export const startL1BatchHandler = async (
     throw new Error('No l2NetworkId! (You should add --l2NetworkId)');
   }
 
-  const rawData = await getRawData(sequencerTx, args.l2NetworkId, provider);
+  l2NetworkId = args.l2NetworkId;
+  l1Provider = provider;
+
+  const rawData = await getRawData(sequencerTx);
   const compressedData = processRawData(rawData);
   const l2segments = decompressAndDecode(compressedData);
-  const l2Msgs = getAllL2Msgs(l2segments);
 
+  const l2Msgs = await getAllL2Msgs(l2segments, 10);
+  console.log(l2Msgs.length);
+  const hexData: string[] = [];
+  for (let i = 0; i < l2Msgs.length; i++) {
+    hexData.push(Buffer.from(l2Msgs[i]).toString('hex'));
+  }
+  // fs.writeFileSync("./test3", hexData.toString());
   const txHash: string[] = [];
   for (let i = 0; i < l2Msgs.length; i++) {
     txHash.push(...decodeL2Msgs(l2Msgs[i]));

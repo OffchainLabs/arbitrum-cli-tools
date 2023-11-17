@@ -3,8 +3,15 @@ import brotli from 'brotli';
 import { rlp, bufArrToArr } from 'ethereumjs-util';
 import { Decoded, Input } from 'rlp';
 import { getL2Network } from '@arbitrum/sdk';
+import { Inbox__factory } from '@arbitrum/sdk/dist/lib/abi/factories/Inbox__factory';
 import { Interface } from 'ethers/lib/utils';
 import { seqFunctionAbi } from './abi';
+import { l1Provider, l2NetworkId } from './exec';
+import { parseEthDepositMessage, parseRetryableTx } from './txParser';
+import { InboxMessageDeliveredEvent } from '@arbitrum/sdk/dist/lib/abi/Inbox';
+import { MessageDeliveredEvent } from '@arbitrum/sdk/dist/lib/abi/Bridge';
+import { EventArgs } from '@arbitrum/sdk/dist/lib/dataEntities/event';
+import { L1TransactionReceipt } from '@arbitrum/sdk/dist/lib/message/L1Transaction';
 
 const MaxL2MessageSize = 256 * 1024;
 const BrotliMessageHeaderByte = 0;
@@ -13,8 +20,18 @@ const BatchSegmentKindL2Message = 0;
 const BatchSegmentKindL2MessageBrotli = 1;
 const BatchSegmentKindDelayedMessages = 2;
 
+const L1MessageType_L2FundedByL1 = 7;
+const L1MessageType_submitRetryableTx = 9;
+const L1MessageType_ethDeposit = 12;
+// const L1MessageType_batchPostingReport = 13;
 const L2MessageKind_Batch = 3;
 const L2MessageKind_SignedTx = 4;
+const delayedMsgToBeAdded = 9;
+
+export type DelayedTxEvent = {
+  inboxMessageEvent: EventArgs<InboxMessageDeliveredEvent>;
+  bridgeMessageEvent: EventArgs<MessageDeliveredEvent>;
+};
 
 // Use brotli to decompress the compressed data and use rlp to decode to l2 message segments
 export const decompressAndDecode = (compressedData: Uint8Array): Uint8Array[] => {
@@ -57,32 +74,54 @@ const getNextSerializedTransactionSize = (remainData: Uint8Array, start: number)
   return size;
 };
 
-export const getAllL2Msgs = (l2segments: Uint8Array[]): Uint8Array[] => {
-  const l2Msgs: Uint8Array[] = [];
+export const getAllL2Msgs = async (
+  l2segments: Uint8Array[],
+  afterDelayedMessagesRead: number,
+): Promise<Uint8Array[]> => {
+  let l2Msgs: Uint8Array[] = [];
 
-  for (let i = 0; i < l2segments.length; i++) {
-    const kind = l2segments[i][0];
-    let segment = l2segments[i].subarray(1);
-    /**
-     * Here might contain Timestamp updates and l1 block updates message here, but it is useless
-     * in finding tx hash here, so we just need to find tx related messages.
-     */
-    if (kind === BatchSegmentKindL2Message || kind === BatchSegmentKindL2MessageBrotli) {
-      if (kind === BatchSegmentKindL2MessageBrotli) {
-        segment = brotli.decompress(Buffer.from(segment));
-      }
-      l2Msgs.push(segment);
-    }
-    if (kind === BatchSegmentKindDelayedMessages) {
-      //TODO
-    }
-  }
+  [l2Msgs] = await extractL2Msg(l2segments, afterDelayedMessagesRead - 1, 0);
 
   if (l2Msgs.length > MaxL2MessageSize) {
     throw Error('Message too large');
   }
 
   return l2Msgs;
+};
+
+const extractL2Msg = async (
+  l2segments: Uint8Array[],
+  delayedMessageIndex: number,
+  index: number,
+): Promise<[Uint8Array[], number]> => {
+  let l2Msgs: Uint8Array[] = [];
+  let currentDelayedMessageIndex = delayedMessageIndex;
+  if (index < l2segments.length - 1) {
+    [l2Msgs, currentDelayedMessageIndex] = await extractL2Msg(
+      l2segments,
+      currentDelayedMessageIndex,
+      index + 1,
+    );
+  }
+
+  const kind = l2segments[index][0];
+  let segment = l2segments[index].subarray(1);
+  /**
+   * Here might contain Timestamp updates and l1 block updates message here, but it is useless
+   * in finding tx hash here, so we just need to find tx related messages.
+   */
+  if (kind === BatchSegmentKindL2Message || kind === BatchSegmentKindL2MessageBrotli) {
+    if (kind === BatchSegmentKindL2MessageBrotli) {
+      segment = brotli.decompress(Buffer.from(segment));
+    }
+    l2Msgs.push(segment);
+  }
+  if (kind === BatchSegmentKindDelayedMessages) {
+    //TODO
+    //MessageDelivered
+    l2Msgs.push(await getDelayedTx(delayedMessageIndex));
+  }
+  return [l2Msgs, currentDelayedMessageIndex];
 };
 
 export const decodeL2Msgs = (l2Msgs: Uint8Array): string[] => {
@@ -107,21 +146,21 @@ export const decodeL2Msgs = (l2Msgs: Uint8Array): string[] => {
       txHash.push(...decodeL2Msgs(nextData));
       current = endOfNext;
     }
+  } else if (kind === delayedMsgToBeAdded) {
+    const remainData: Uint8Array = l2Msgs.subarray(1);
+    const currentHash = ethers.utils.hexlify(remainData);
+    txHash.push(currentHash);
   }
   return txHash;
 };
 
 // Get related sequencer batch data from a sequencer batch submission transaction.
-export const getRawData = async (
-  sequencerTx: string,
-  l2NetworkId: number,
-  provider: ethers.providers.JsonRpcProvider,
-): Promise<Uint8Array> => {
+export const getRawData = async (sequencerTx: string): Promise<Uint8Array> => {
   //Because current arbitrum-sdk doesn't support latest sequencer inbox contract, so we use ethersjs here directly.
   const contractInterface = new Interface(seqFunctionAbi);
   const l2Network = await getL2Network(l2NetworkId);
-  const txReceipt = await provider.getTransactionReceipt(sequencerTx);
-  const tx = await provider.getTransaction(sequencerTx);
+  const txReceipt = await l1Provider.getTransactionReceipt(sequencerTx);
+  const tx = await l1Provider.getTransaction(sequencerTx);
   if (!tx || !txReceipt || (txReceipt && !txReceipt.status)) {
     throw new Error('No such a l1 transaction or transaction reverted');
   }
@@ -139,5 +178,67 @@ export const getRawData = async (
 //TODO: get all startBlock tx in this batch
 export const getAllStartBlockTx = () => {};
 
-//TODO: get all tx from delayed inbox in this batch
-export const getAllDelayed = () => {};
+// TODO: get all tx from delayed inbox in this batch
+export const getDelayedTx = async (messageIndex: number): Promise<Uint8Array> => {
+  const l2Network = await getL2Network(l2NetworkId);
+  const inbox = Inbox__factory.connect(l2Network.ethBridge.inbox, l1Provider);
+  // const bridge = Bridge__factory.connect(l2Network.ethBridge.bridge, l1Provider)
+
+  // Get tx message data
+  const queryInboxMessageDelivered = inbox.filters.InboxMessageDelivered(messageIndex);
+  const inboxMsgEvent = await inbox.queryFilter(queryInboxMessageDelivered);
+  const txReceipt = await inboxMsgEvent[0].getTransactionReceipt();
+  const l1Tx = new L1TransactionReceipt(txReceipt);
+  const targetEvent = getTargetEvent(messageIndex, l1Tx);
+  const msgKind = new Uint8Array([delayedMsgToBeAdded]);
+  // const resData:Uint8Array = new Uint8Array([delayedMsgToBeAdded])
+
+  switch (targetEvent.bridgeMessageEvent.kind) {
+    case L1MessageType_L2FundedByL1: {
+      return new Uint8Array([0]);
+    }
+    case L1MessageType_submitRetryableTx: {
+      const txHash = await parseRetryableTx(
+        messageIndex,
+        targetEvent.inboxMessageEvent.data,
+        targetEvent.bridgeMessageEvent.sender,
+        targetEvent.bridgeMessageEvent.baseFeeL1,
+      );
+      const txByteData = ethers.utils.toUtf8Bytes(txHash);
+      return new Uint8Array([...msgKind, ...txByteData]);
+    }
+    case L1MessageType_ethDeposit: {
+      const txHash = await parseEthDepositMessage(
+        messageIndex,
+        targetEvent.inboxMessageEvent.data,
+        targetEvent.bridgeMessageEvent.sender,
+      );
+      const txByteData = ethers.utils.toUtf8Bytes(txHash);
+      return new Uint8Array([...msgKind, ...txByteData]);
+    }
+  }
+  return new Uint8Array([0]);
+};
+
+const getTargetEvent = (messageIndex: number, l1Tx: L1TransactionReceipt): DelayedTxEvent => {
+  const inboxEvents = l1Tx.getInboxMessageDeliveredEvents();
+  const bridgeEvents = l1Tx.getMessageDeliveredEvents();
+
+  let targetInboxEvent: EventArgs<InboxMessageDeliveredEvent>;
+  let targetBridgeEvent: EventArgs<MessageDeliveredEvent>;
+  inboxEvents.forEach((event) => {
+    if (event.messageNum.eq(messageIndex)) {
+      targetInboxEvent = event;
+    }
+  });
+  bridgeEvents.forEach((event) => {
+    if (event.messageIndex.eq(messageIndex)) {
+      targetBridgeEvent = event;
+    }
+  });
+  const targetEventInfo: DelayedTxEvent = {
+    inboxMessageEvent: targetInboxEvent!,
+    bridgeMessageEvent: targetBridgeEvent!,
+  };
+  return targetEventInfo;
+};
