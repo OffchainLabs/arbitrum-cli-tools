@@ -7,7 +7,8 @@ import {
 } from './utils';
 import fs from 'fs';
 import args from '../getClargs';
-import { providers } from 'ethers';
+import { BigNumber, ethers, providers } from 'ethers';
+import { number } from 'yargs';
 
 export let l2NetworkId: number;
 export let l1Provider: providers.JsonRpcProvider;
@@ -26,17 +27,13 @@ export const startL1BatchHandler = async (
   l2NetworkId = args.l2NetworkId;
   l1Provider = provider;
 
-  const rawData = await getRawData(sequencerTx);
+  const [rawData, deleyedCount] = await getRawData(sequencerTx);
   const compressedData = processRawData(rawData);
   const l2segments = decompressAndDecode(compressedData);
 
-  const l2Msgs = await getAllL2Msgs(l2segments, 10);
+  const l2Msgs = await getAllL2Msgs(l2segments, deleyedCount.toNumber());
   console.log(l2Msgs.length);
-  const hexData: string[] = [];
-  for (let i = 0; i < l2Msgs.length; i++) {
-    hexData.push(Buffer.from(l2Msgs[i]).toString('hex'));
-  }
-  // fs.writeFileSync("./test3", hexData.toString());
+
   const txHash: string[] = [];
   for (let i = 0; i < l2Msgs.length; i++) {
     txHash.push(...decodeL2Msgs(l2Msgs[i]));

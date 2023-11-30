@@ -1,9 +1,10 @@
-import { ethers } from 'ethers';
+import { BigNumber, ethers } from 'ethers';
 import brotli from 'brotli';
 import { rlp, bufArrToArr } from 'ethereumjs-util';
 import { Decoded, Input } from 'rlp';
 import { getL2Network } from '@arbitrum/sdk';
 import { Inbox__factory } from '@arbitrum/sdk/dist/lib/abi/factories/Inbox__factory';
+import { Bridge__factory } from '@arbitrum/sdk/dist/lib/abi/factories/Bridge__factory';
 import { Interface } from 'ethers/lib/utils';
 import { seqFunctionAbi } from './abi';
 import { l1Provider, l2NetworkId } from './exec';
@@ -119,7 +120,9 @@ const extractL2Msg = async (
   if (kind === BatchSegmentKindDelayedMessages) {
     //TODO
     //MessageDelivered
-    l2Msgs.push(await getDelayedTx(delayedMessageIndex));
+    l2Msgs.push(await getDelayedTx(currentDelayedMessageIndex));
+    //console.log(ethers.utils.hexlify(l2Msgs[l2Msgs.length - 1]))
+    currentDelayedMessageIndex -= 1
   }
   return [l2Msgs, currentDelayedMessageIndex];
 };
@@ -149,13 +152,14 @@ export const decodeL2Msgs = (l2Msgs: Uint8Array): string[] => {
   } else if (kind === delayedMsgToBeAdded) {
     const remainData: Uint8Array = l2Msgs.subarray(1);
     const currentHash = ethers.utils.hexlify(remainData);
+    console.log(currentHash)
     txHash.push(currentHash);
   }
   return txHash;
 };
 
 // Get related sequencer batch data from a sequencer batch submission transaction.
-export const getRawData = async (sequencerTx: string): Promise<Uint8Array> => {
+export const getRawData = async (sequencerTx: string): Promise<[Uint8Array, BigNumber]> => {
   //Because current arbitrum-sdk doesn't support latest sequencer inbox contract, so we use ethersjs here directly.
   const contractInterface = new Interface(seqFunctionAbi);
   const l2Network = await getL2Network(l2NetworkId);
@@ -168,11 +172,12 @@ export const getRawData = async (sequencerTx: string): Promise<Uint8Array> => {
   if (tx.to !== l2Network.ethBridge.sequencerInbox) {
     throw new Error('Not a sequencer inbox transaction');
   }
-
+  
   const funcData = contractInterface.decodeFunctionData('addSequencerL2BatchFromOrigin', tx.data);
   const seqData = funcData['data'].substring(2); //remove '0x'
+  const deleyedCount = funcData['afterDelayedMessagesRead'] as BigNumber
   const rawData = Uint8Array.from(Buffer.from(seqData, 'hex'));
-  return rawData;
+  return [rawData, deleyedCount];
 };
 
 //TODO: get all startBlock tx in this batch
@@ -182,39 +187,42 @@ export const getAllStartBlockTx = () => {};
 export const getDelayedTx = async (messageIndex: number): Promise<Uint8Array> => {
   const l2Network = await getL2Network(l2NetworkId);
   const inbox = Inbox__factory.connect(l2Network.ethBridge.inbox, l1Provider);
-  // const bridge = Bridge__factory.connect(l2Network.ethBridge.bridge, l1Provider)
+  const bridge = Bridge__factory.connect(l2Network.ethBridge.bridge, l1Provider)
 
   // Get tx message data
-  const queryInboxMessageDelivered = inbox.filters.InboxMessageDelivered(messageIndex);
-  const inboxMsgEvent = await inbox.queryFilter(queryInboxMessageDelivered);
+  const queryInboxMessageDelivered = bridge.filters.MessageDelivered(messageIndex);
+  const inboxMsgEvent = await bridge.queryFilter(queryInboxMessageDelivered);
   const txReceipt = await inboxMsgEvent[0].getTransactionReceipt();
   const l1Tx = new L1TransactionReceipt(txReceipt);
   const targetEvent = getTargetEvent(messageIndex, l1Tx);
-  const msgKind = new Uint8Array([delayedMsgToBeAdded]);
-  // const resData:Uint8Array = new Uint8Array([delayedMsgToBeAdded])
+  const msgKind = delayedMsgToBeAdded;
 
   switch (targetEvent.bridgeMessageEvent.kind) {
     case L1MessageType_L2FundedByL1: {
+      console.log("L1MessageType_L2FundedByL1")
       return new Uint8Array([0]);
     }
     case L1MessageType_submitRetryableTx: {
-      const txHash = await parseRetryableTx(
+      let txHash = await parseRetryableTx(
         messageIndex,
         targetEvent.inboxMessageEvent.data,
         targetEvent.bridgeMessageEvent.sender,
         targetEvent.bridgeMessageEvent.baseFeeL1,
       );
-      const txByteData = ethers.utils.toUtf8Bytes(txHash);
-      return new Uint8Array([...msgKind, ...txByteData]);
+
+      txHash = '0' + delayedMsgToBeAdded.toString() + txHash.substring(2)
+      const res = Uint8Array.from(Buffer.from(txHash, 'hex'));
+      return res
     }
     case L1MessageType_ethDeposit: {
-      const txHash = await parseEthDepositMessage(
+      let txHash = await parseEthDepositMessage(
         messageIndex,
         targetEvent.inboxMessageEvent.data,
         targetEvent.bridgeMessageEvent.sender,
       );
-      const txByteData = ethers.utils.toUtf8Bytes(txHash);
-      return new Uint8Array([...msgKind, ...txByteData]);
+      txHash = '0' + delayedMsgToBeAdded.toString() + txHash.substring(2)
+      const res = Uint8Array.from(Buffer.from(txHash, 'hex'));
+      return res;
     }
   }
   return new Uint8Array([0]);
