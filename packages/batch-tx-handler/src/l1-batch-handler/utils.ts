@@ -120,7 +120,6 @@ const extractL2Msg = async (
     //TODO
     //MessageDelivered
     l2Msgs.push(await getDelayedTx(currentDelayedMessageIndex));
-    //console.log(ethers.utils.hexlify(l2Msgs[l2Msgs.length - 1]))
     currentDelayedMessageIndex -= 1;
   }
   return [l2Msgs, currentDelayedMessageIndex];
@@ -151,7 +150,6 @@ export const decodeL2Msgs = (l2Msgs: Uint8Array): string[] => {
   } else if (kind === delayedMsgToBeAdded) {
     const remainData: Uint8Array = l2Msgs.subarray(1);
     const currentHash = ethers.utils.hexlify(remainData);
-    console.log(currentHash);
     txHash.push(currentHash);
   }
   return txHash;
