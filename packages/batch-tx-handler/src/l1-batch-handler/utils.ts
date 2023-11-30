@@ -193,10 +193,6 @@ export const getDelayedTx = async (messageIndex: number): Promise<Uint8Array> =>
   const targetEvent = getTargetEvent(messageIndex, l1Tx);
 
   switch (targetEvent.bridgeMessageEvent.kind) {
-    case L1MessageType_L2FundedByL1: {
-      console.log('L1MessageType_L2FundedByL1');
-      return new Uint8Array([0]);
-    }
     case L1MessageType_submitRetryableTx: {
       let txHash = await parseRetryableTx(
         messageIndex,
