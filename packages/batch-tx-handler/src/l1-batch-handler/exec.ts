@@ -7,8 +7,7 @@ import {
 } from './utils';
 import fs from 'fs';
 import args from '../getClargs';
-import { BigNumber, ethers, providers } from 'ethers';
-import { number } from 'yargs';
+import { providers } from 'ethers';
 
 export let l2NetworkId: number;
 export let l1Provider: providers.JsonRpcProvider;
@@ -32,7 +31,6 @@ export const startL1BatchHandler = async (
   const l2segments = decompressAndDecode(compressedData);
 
   const l2Msgs = await getAllL2Msgs(l2segments, deleyedCount.toNumber());
-  console.log(l2Msgs.length);
 
   const txHash: string[] = [];
   for (let i = 0; i < l2Msgs.length; i++) {
