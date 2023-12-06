@@ -12,19 +12,16 @@ import { InboxMessageDeliveredEvent } from '@arbitrum/sdk/dist/lib/abi/Inbox';
 import { MessageDeliveredEvent } from '@arbitrum/sdk/dist/lib/abi/Bridge';
 import { EventArgs } from '@arbitrum/sdk/dist/lib/dataEntities/event';
 import { L1TransactionReceipt } from '@arbitrum/sdk/dist/lib/message/L1Transaction';
-import fetch from "node-fetch";
-
-var unirest = require('unirest');
+import fetch from 'node-fetch';
 
 const MaxL2MessageSize = 256 * 1024;
 const BrotliMessageHeaderByte = 0;
-const DASMessageHeaderFlag  = 0x80;
+const DASMessageHeaderFlag = 0x80;
 
 const BatchSegmentKindL2Message = 0;
 const BatchSegmentKindL2MessageBrotli = 1;
 const BatchSegmentKindDelayedMessages = 2;
 
-const L1MessageType_L2FundedByL1 = 7;
 const L1MessageType_submitRetryableTx = 9;
 const L1MessageType_ethDeposit = 12;
 // const L1MessageType_batchPostingReport = 13;
@@ -32,7 +29,7 @@ const L2MessageKind_Batch = 3;
 const L2MessageKind_SignedTx = 4;
 const delayedMsgToBeAdded = 9;
 
-const NovaDacUrls = "https://nova.arbitrum.io/das-servers";
+const NovaDacUrls = 'https://nova.arbitrum.io/das-servers';
 
 export type DelayedTxEvent = {
   inboxMessageEvent: EventArgs<InboxMessageDeliveredEvent>;
@@ -171,8 +168,7 @@ export const getRawData = async (sequencerTx: string): Promise<[Uint8Array, BigN
   if (!tx || !txReceipt || (txReceipt && !txReceipt.status)) {
     throw new Error('No such a l1 transaction or transaction reverted');
   }
-
-  if (tx.to !== l2Network.ethBridge.sequencerInbox) {
+  if (tx.to.toLowerCase() !== l2Network.ethBridge.sequencerInbox.toLowerCase()) {
     throw new Error('Not a sequencer inbox transaction');
   }
 
@@ -180,73 +176,73 @@ export const getRawData = async (sequencerTx: string): Promise<[Uint8Array, BigN
   const seqData = funcData['data'].substring(2); //remove '0x'
   const deleyedCount = funcData['afterDelayedMessagesRead'] as BigNumber;
   let rawData = Uint8Array.from(Buffer.from(seqData, 'hex'));
-  if((rawData[0] & DASMessageHeaderFlag)) {
-    if(l2Network.chainID !== 42170) {
-      throw new Error("For anytrust network, only support Arbitrum nova now")
+  if (rawData[0] & DASMessageHeaderFlag) {
+    if (l2Network.chainID !== 42170) {
+      throw new Error('For anytrust network, only support Arbitrum nova now');
     }
-    rawData = await processDASBatch(rawData)
+    rawData = await processDASBatch(rawData);
   }
   return [rawData, deleyedCount];
 };
 
 const processDASBatch = async (rawData: Uint8Array) => {
-  const req = await fetch('https://nova.arbitrum.io/das-servers')
-  const urls = await req.text()
-  if(urls.length === 0) {
-    throw Error("No online das servers now")
+  const req = await fetch(NovaDacUrls);
+  const urls = (await req.text()).split('\n');
+  if (urls.length === 0) {
+    throw Error('No online das servers now');
   }
-  return getDACData(urls[0], rawData)
-}
+  return getDACData(urls[0], rawData);
+};
 
 const getDACData = async (url: string, rawData: Uint8Array) => {
   // The first byte is header flag, the 2nd to 33rd bytes is keyset hash, 34th to 65th is data hash which is what we want.
-  const dataHash = ethers.utils.hexlify(rawData.subarray(33, 65))
+  const dataHash = ethers.utils.hexlify(rawData.subarray(33, 65));
   // const dataHash = rawData.substring(33, 64)
-  const requestUrl = url + `/get-by-hash/` + dataHash
-  const req = await fetch(requestUrl)
-  
-  const base64Data = await req.json()
-  const hexRawData = base64ToHex(base64Data.data)
-  return Uint8Array.from(Buffer.from(hexRawData, 'hex'));
-}
+  const requestUrl = url + `/get-by-hash/` + dataHash.substring(2);
+  const req = await fetch(requestUrl);
 
-const base64ToHex = ( () => {
+  const base64Data = await req.json();
+  const hexRawData = base64ToHex(base64Data.data);
+  return Uint8Array.from(Buffer.from(hexRawData, 'hex'));
+};
+
+const base64ToHex = (() => {
   // Lookup tables
-  const values = [], output = [];
+  const values = [],
+    output = [];
 
   // Main converter
-  return function base64ToHex ( txt, sep = '' ) {
-     if ( output.length <= 0 ) populateLookups();
-     const result = [];
-     let v1, v2, v3, v4;
-     for ( let i = 0, len = txt.length ; i < len ; i += 4 ) {
-        // Map four chars to values.
-        v1 = values[ txt.charCodeAt( i   ) ];
-        v2 = values[ txt.charCodeAt( i+1 ) ];
-        v3 = values[ txt.charCodeAt( i+2 ) ];
-        v4 = values[ txt.charCodeAt( i+3 ) ];
-        // Split and merge bits, then map and push to output.
-        result.push(
-           output[ ( v1 << 2) | (v2 >> 4) ],
-           output[ ((v2 & 15) << 4) | (v3 >> 2) ],
-           output[ ((v3 &  3) << 6) |  v4 ]
-        );
-     }
-     // Trim result if the last values are '='.
-     if ( v4 === 64 ) result.splice( v3 === 64 ? -2 : -1 );
-     return result.join( sep );
+  return function base64ToHex(txt, sep = '') {
+    if (output.length <= 0) populateLookups();
+    const result = [];
+    let v1, v2, v3, v4;
+    for (let i = 0, len = txt.length; i < len; i += 4) {
+      // Map four chars to values.
+      v1 = values[txt.charCodeAt(i)];
+      v2 = values[txt.charCodeAt(i + 1)];
+      v3 = values[txt.charCodeAt(i + 2)];
+      v4 = values[txt.charCodeAt(i + 3)];
+      // Split and merge bits, then map and push to output.
+      result.push(
+        output[(v1 << 2) | (v2 >> 4)],
+        output[((v2 & 15) << 4) | (v3 >> 2)],
+        output[((v3 & 3) << 6) | v4],
+      );
+    }
+    // Trim result if the last values are '='.
+    if (v4 === 64) result.splice(v3 === 64 ? -2 : -1);
+    return result.join(sep);
   };
 
-  function populateLookups () {
-     const keys = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-     for ( let i = 0 ; i < 256 ; i++ ) {
-        output.push( ( '0' + i.toString( 16 ) ).slice( -2 ) );
-        values.push( 0 );
-     }
-     for ( let i = 0 ; i <  65 ; i++ )
-        values[ keys.charCodeAt( i ) ] = i;
+  function populateLookups() {
+    const keys = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    for (let i = 0; i < 256; i++) {
+      output.push(('0' + i.toString(16)).slice(-2));
+      values.push(0);
+    }
+    for (let i = 0; i < 65; i++) values[keys.charCodeAt(i)] = i;
   }
-} )();
+})();
 
 //TODO: get all startBlock tx in this batch
 export const getAllStartBlockTx = () => {};
