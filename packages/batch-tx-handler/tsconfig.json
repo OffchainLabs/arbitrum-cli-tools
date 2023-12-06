@@ -1,0 +1,15 @@
+{
+    "compilerOptions": {
+      "target": "es2017",
+      "module": "commonjs",
+      "lib": ["DOM"],
+      "esModuleInterop": true
+    },
+    "ts-node": {
+      "esm": true,
+      "compilerOptions": {
+        "module": "nodenext",
+      }
+    }
+  }
+  

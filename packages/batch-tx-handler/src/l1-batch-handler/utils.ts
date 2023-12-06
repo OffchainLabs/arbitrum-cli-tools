@@ -12,9 +12,13 @@ import { InboxMessageDeliveredEvent } from '@arbitrum/sdk/dist/lib/abi/Inbox';
 import { MessageDeliveredEvent } from '@arbitrum/sdk/dist/lib/abi/Bridge';
 import { EventArgs } from '@arbitrum/sdk/dist/lib/dataEntities/event';
 import { L1TransactionReceipt } from '@arbitrum/sdk/dist/lib/message/L1Transaction';
+import fetch from "node-fetch";
+
+var unirest = require('unirest');
 
 const MaxL2MessageSize = 256 * 1024;
 const BrotliMessageHeaderByte = 0;
+const DASMessageHeaderFlag  = 0x80;
 
 const BatchSegmentKindL2Message = 0;
 const BatchSegmentKindL2MessageBrotli = 1;
@@ -27,6 +31,8 @@ const L1MessageType_ethDeposit = 12;
 const L2MessageKind_Batch = 3;
 const L2MessageKind_SignedTx = 4;
 const delayedMsgToBeAdded = 9;
+
+const NovaDacUrls = "https://nova.arbitrum.io/das-servers";
 
 export type DelayedTxEvent = {
   inboxMessageEvent: EventArgs<InboxMessageDeliveredEvent>;
@@ -174,8 +180,47 @@ export const getRawData = async (sequencerTx: string): Promise<[Uint8Array, BigN
   const seqData = funcData['data'].substring(2); //remove '0x'
   const deleyedCount = funcData['afterDelayedMessagesRead'] as BigNumber;
   const rawData = Uint8Array.from(Buffer.from(seqData, 'hex'));
+  if((rawData[0] & DASMessageHeaderFlag)) {
+    if(l2Network.chainID !== 42170) {
+      throw new Error("For anytrust network, only support Arbitrum nova now")
+    }
+    processDASBatch(rawData)
+  }
   return [rawData, deleyedCount];
 };
+
+const processDASBatch = async (rawData: Uint8Array) => {
+  // let config = {
+  //   method: 'get',
+  //   url: 'https://nova.arbitrum.io/das-servers'
+  // };
+  
+  // axios.request(config)
+  //   .then((response) => {
+  //     console.log(JSON.stringify(response.data));
+  //   })
+  //   .catch((error) => {
+  //     console.log(error);
+  //   });
+  const req = await fetch('https://nova.arbitrum.io/das-servers')
+  const urls = await req.text()
+  if(urls.length === 0) {
+    throw Error("No online das servers now")
+  }
+  // const resData = getDACData(urls[0], rawData)
+}
+
+const getDACData = async (url: string, rawData: string) => {
+  // The first byte is header flag, the 2nd to 33rd bytes is keyset hash, 34th to 65th is data hash which is what we want.
+  // const dataHash = ethers.utils.hexlify(rawData.subarray(33, 64))
+  const dataHash = rawData.substring(33, 64)
+  const requestUrl = url + `/get-by-hash/` + dataHash
+  const req = await fetch(requestUrl)
+  const base64Data = await req.text()
+  console.log(base64Data)
+}
+
+// processDASBatch()
 
 //TODO: get all startBlock tx in this batch
 export const getAllStartBlockTx = () => {};
