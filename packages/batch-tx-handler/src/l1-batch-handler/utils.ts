@@ -197,7 +197,6 @@ const processDASBatch = async (rawData: Uint8Array) => {
 const getDACData = async (url: string, rawData: Uint8Array) => {
   // The first byte is header flag, the 2nd to 33rd bytes is keyset hash, 34th to 65th is data hash which is what we want.
   const dataHash = ethers.utils.hexlify(rawData.subarray(33, 65));
-  // const dataHash = rawData.substring(33, 64)
   const requestUrl = url + `/get-by-hash/` + dataHash.substring(2);
   const req = await fetch(requestUrl);
 
