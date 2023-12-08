@@ -14,9 +14,20 @@ import { EventArgs } from '@arbitrum/sdk/dist/lib/dataEntities/event';
 import { L1TransactionReceipt } from '@arbitrum/sdk/dist/lib/message/L1Transaction';
 import fetch from 'node-fetch';
 import { Base64 } from 'js-base64';
-import { BatchSegmentKindDelayedMessages, BatchSegmentKindL2Message, BatchSegmentKindL2MessageBrotli, BrotliMessageHeaderByte, DASMessageHeaderFlag, delayedMsgToBeAdded, L1MessageType_ethDeposit, L1MessageType_submitRetryableTx, L2MessageKind_Batch, L2MessageKind_SignedTx, MaxL2MessageSize, NovaDacUrl } from './constant';
-
-
+import {
+  BatchSegmentKindDelayedMessages,
+  BatchSegmentKindL2Message,
+  BatchSegmentKindL2MessageBrotli,
+  BrotliMessageHeaderByte,
+  DASMessageHeaderFlag,
+  delayedMsgToBeAdded,
+  L1MessageType_ethDeposit,
+  L1MessageType_submitRetryableTx,
+  L2MessageKind_Batch,
+  L2MessageKind_SignedTx,
+  MaxL2MessageSize,
+  NovaDacUrl,
+} from './constant';
 
 export type DelayedTxEvent = {
   inboxMessageEvent: EventArgs<InboxMessageDeliveredEvent>;
