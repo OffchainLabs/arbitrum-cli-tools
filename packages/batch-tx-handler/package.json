@@ -35,7 +35,7 @@
     "ethereumjs-util": "^7.1.5",
     "ethers": "^5.7.0",
     "js-base64": "^3.7.5",
-    "node-fetch": "2",
+    "node-fetch": "^2.7.0",
     "ts-node": "^10.9.1",
     "typescript": "^5.0.4",
     "yargs": "^17.2.1"
