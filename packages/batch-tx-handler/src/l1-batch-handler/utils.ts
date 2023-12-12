@@ -183,10 +183,10 @@ export const getRawData = async (sequencerTx: string): Promise<[Uint8Array, BigN
 };
 
 const processDASBatch = async (rawData: Uint8Array) => {
-  if(!process.env.NovaDacUrl) {
+  if(!process.env.NovaDacListUrl) {
     throw new Error("You are calling anytrust dac while don't provide the dac list url")
   }
-  const req = await fetch(process.env.NovaDacUrl);
+  const req = await fetch(process.env.NovaDacListUrl);
   const urls = (await req.text()).split('\n');
   if (urls.length === 0) {
     throw Error('No online das servers now');
