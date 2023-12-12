@@ -12,5 +12,3 @@ export const L1MessageType_ethDeposit = 12;
 export const L2MessageKind_Batch = 3;
 export const L2MessageKind_SignedTx = 4;
 export const delayedMsgToBeAdded = 9;
-
-export const NovaDacUrl = 'https://nova.arbitrum.io/das-servers';

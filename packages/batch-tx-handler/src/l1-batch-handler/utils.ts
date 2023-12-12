@@ -26,7 +26,6 @@ import {
   L2MessageKind_Batch,
   L2MessageKind_SignedTx,
   MaxL2MessageSize,
-  NovaDacUrl,
 } from './constant';
 
 export type DelayedTxEvent = {
@@ -184,19 +183,31 @@ export const getRawData = async (sequencerTx: string): Promise<[Uint8Array, BigN
 };
 
 const processDASBatch = async (rawData: Uint8Array) => {
-  const req = await fetch(NovaDacUrl);
+  if(!process.env.NovaDacUrl) {
+    throw new Error("You are calling anytrust dac while don't provide the dac list url")
+  }
+  const req = await fetch(process.env.NovaDacUrl);
   const urls = (await req.text()).split('\n');
   if (urls.length === 0) {
     throw Error('No online das servers now');
   }
-  return getDACData(urls[0], rawData);
+  return getDACData(urls, rawData);
 };
 
-const getDACData = async (url: string, rawData: Uint8Array) => {
+// Here is the reference in nitro source code: https://github.com/OffchainLabs/nitro/blob/v2.1.3/arbstate/inbox.go#L127
+const getDACData = async (urls: string[], rawData: Uint8Array) => {
   // The first byte is header flag, the 2nd to 33rd bytes is keyset hash, 34th to 65th is data hash which is what we want.
   const dataHash = ethers.utils.hexlify(rawData.subarray(33, 65));
-  const requestUrl = url + `/get-by-hash/` + dataHash.substring(2);
-  const req = await fetch(requestUrl);
+  let req;
+  for(let i = 0; i < urls.length; i++) {
+    const requestUrl = urls[i] + `/get-by-hash/` + dataHash.substring(2);
+    try {
+      req = await fetch(requestUrl);
+    } catch {
+      console.log(`URL for one of the da node (${urls[i]}) is broken, trying another one...`);
+    }
+    break;
+  }
   const base64Data = await req.json();
   return Base64.toUint8Array(base64Data.data);
 };
