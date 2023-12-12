@@ -162,7 +162,7 @@ export const getRawData = async (sequencerTx: string): Promise<[Uint8Array, BigN
   const l2Network = await getL2Network(l2NetworkId);
   const txReceipt = await l1Provider.getTransactionReceipt(sequencerTx);
   const tx = await l1Provider.getTransaction(sequencerTx);
-  if (!tx || !txReceipt || (txReceipt && !txReceipt.status)) {
+  if (!tx || !txReceipt || !txReceipt.status) {
     throw new Error('No such a l1 transaction or transaction reverted');
   }
 
