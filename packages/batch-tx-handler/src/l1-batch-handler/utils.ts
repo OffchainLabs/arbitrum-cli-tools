@@ -12,20 +12,21 @@ import { InboxMessageDeliveredEvent } from '@arbitrum/sdk/dist/lib/abi/Inbox';
 import { MessageDeliveredEvent } from '@arbitrum/sdk/dist/lib/abi/Bridge';
 import { EventArgs } from '@arbitrum/sdk/dist/lib/dataEntities/event';
 import { L1TransactionReceipt } from '@arbitrum/sdk/dist/lib/message/L1Transaction';
-
-const MaxL2MessageSize = 256 * 1024;
-const BrotliMessageHeaderByte = 0;
-
-const BatchSegmentKindL2Message = 0;
-const BatchSegmentKindL2MessageBrotli = 1;
-const BatchSegmentKindDelayedMessages = 2;
-
-const L1MessageType_submitRetryableTx = 9;
-const L1MessageType_ethDeposit = 12;
-// const L1MessageType_batchPostingReport = 13;
-const L2MessageKind_Batch = 3;
-const L2MessageKind_SignedTx = 4;
-const delayedMsgToBeAdded = 9;
+import fetch from 'node-fetch';
+import { Base64 } from 'js-base64';
+import {
+  BatchSegmentKindDelayedMessages,
+  BatchSegmentKindL2Message,
+  BatchSegmentKindL2MessageBrotli,
+  BrotliMessageHeaderByte,
+  DASMessageHeaderFlag,
+  delayedMsgToBeAdded,
+  L1MessageType_ethDeposit,
+  L1MessageType_submitRetryableTx,
+  L2MessageKind_Batch,
+  L2MessageKind_SignedTx,
+  MaxL2MessageSize,
+} from './constant';
 
 export type DelayedTxEvent = {
   inboxMessageEvent: EventArgs<InboxMessageDeliveredEvent>;
@@ -146,16 +147,59 @@ export const getRawData = async (sequencerTx: string): Promise<[Uint8Array, BigN
   if (!tx || !txReceipt || !txReceipt.status) {
     throw new Error('No such a l1 transaction or transaction reverted');
   }
-
-  if (tx.to !== l2Network.ethBridge.sequencerInbox) {
+  if (tx.to.toLowerCase() !== l2Network.ethBridge.sequencerInbox.toLowerCase()) {
     throw new Error('Not a sequencer inbox transaction');
   }
 
   const funcData = contractInterface.decodeFunctionData('addSequencerL2BatchFromOrigin', tx.data);
   const seqData = funcData['data'].substring(2); //remove '0x'
   const deleyedCount = funcData['afterDelayedMessagesRead'] as BigNumber;
-  const rawData = Uint8Array.from(Buffer.from(seqData, 'hex'));
+  let rawData = Uint8Array.from(Buffer.from(seqData, 'hex'));
+  if (rawData[0] & DASMessageHeaderFlag) {
+    if (l2Network.chainID !== 42170) {
+      throw new Error('For anytrust network, only support Arbitrum nova now');
+    }
+    rawData = await processDASBatch(rawData);
+  }
   return [rawData, deleyedCount];
+};
+
+const processDASBatch = async (rawData: Uint8Array) => {
+  if(!process.env.NovaDacListUrl) {
+    throw new Error("You are calling anytrust dac while don't provide the dac list url")
+  }
+  const req = await fetch(process.env.NovaDacListUrl);
+  const urls = (await req.text()).split('\n');
+  if (urls.length === 0) {
+    throw Error('No online das servers now');
+  }
+  return getDACData(urls, rawData);
+};
+
+// Here is the reference in nitro source code: https://github.com/OffchainLabs/nitro/blob/v2.1.3/arbstate/inbox.go#L127
+const getDACData = async (urls: string[], rawData: Uint8Array) => {
+  // The first byte is header flag, the 2nd to 33rd bytes is keyset hash, 34th to 65th is data hash which is what we want.
+  const dataHash = ethers.utils.hexlify(rawData.subarray(33, 65));
+  let req;
+  let base64Data;
+  for(let i = 0; i < urls.length; i++) {
+    const requestUrl = urls[i] + `/get-by-hash/` + dataHash.substring(2);
+    try {
+      req = await fetch(requestUrl);
+      base64Data = await req.json();
+      if(req.data === "") {
+        throw new Error("Empty data");
+      }
+      break;
+    } catch {
+      if(i === urls.length - 1) {
+        console.log(`URL for one of the da node (${urls[i]}) is broken.`);
+        throw new Error("All url seems broken, try it later or check your network connection.");
+      }
+      console.log(`URL for one of the da node (${urls[i]}) is broken, trying another one...`);
+    }
+  }
+  return Base64.toUint8Array(base64Data.data);
 };
 
 //TODO: get all startBlock tx in this batch
