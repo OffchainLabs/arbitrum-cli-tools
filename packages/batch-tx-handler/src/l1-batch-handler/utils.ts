@@ -199,16 +199,23 @@ const getDACData = async (urls: string[], rawData: Uint8Array) => {
   // The first byte is header flag, the 2nd to 33rd bytes is keyset hash, 34th to 65th is data hash which is what we want.
   const dataHash = ethers.utils.hexlify(rawData.subarray(33, 65));
   let req;
+  let base64Data;
   for(let i = 0; i < urls.length; i++) {
     const requestUrl = urls[i] + `/get-by-hash/` + dataHash.substring(2);
     try {
       req = await fetch(requestUrl);
+      base64Data = await req.json();
+      if(req.data === "") {
+        throw new Error("Empty data");
+      }
+      break;
     } catch {
+      if(i === urls.length - 1) {
+        throw new Error("All url seems broken, try it later or check your network connection.");
+      }
       console.log(`URL for one of the da node (${urls[i]}) is broken, trying another one...`);
     }
-    break;
   }
-  const base64Data = await req.json();
   return Base64.toUint8Array(base64Data.data);
 };
 
