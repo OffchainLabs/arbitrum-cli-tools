@@ -10,6 +10,8 @@ This demo will tell you how to use brotli to decompress the calldata and decode 
 
 See [./exec.js](./src/l1-batch-handler/exec.js) for inline explanations.
 
+Currently this handler supported extract delayed transaction (`retryable ticket creation` and `deposit eth`), but still doesn't support `startBlock` transaction and `l1funded` transaction, because those 2 types of tx needs some cached state from l2 or re-run all batch tx to get.
+
 TODO:
 Add `startBlock` and delayed transaction handler.
 
