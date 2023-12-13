@@ -147,7 +147,7 @@ export const getRawData = async (sequencerTx: string): Promise<[Uint8Array, BigN
   if (!tx || !txReceipt || !txReceipt.status) {
     throw new Error('No such a l1 transaction or transaction reverted');
   }
-  if (tx.to.toLowerCase() !== l2Network.ethBridge.sequencerInbox.toLowerCase()) {
+  if (tx.to!.toLowerCase() !== l2Network.ethBridge.sequencerInbox.toLowerCase()) {
     throw new Error('Not a sequencer inbox transaction');
   }
 
@@ -187,7 +187,7 @@ const getDACData = async (urls: string[], rawData: Uint8Array) => {
     try {
       req = await fetch(requestUrl);
       base64Data = await req.json();
-      if(req.data === "") {
+      if(!base64Data["data"]) {
         throw new Error("Empty data");
       }
       break;
