@@ -78,51 +78,33 @@ export const getAllL2Msgs = async (
   l2segments: Uint8Array[],
   afterDelayedMessagesRead: number,
 ): Promise<Uint8Array[]> => {
-  let l2Msgs: Uint8Array[] = [];
-
-  [l2Msgs] = await extractL2Msg(l2segments, afterDelayedMessagesRead - 1, 0);
+  const l2Msgs: Uint8Array[] = [];
+  let currentDelayedMessageIndex = afterDelayedMessagesRead - 1;
+  for (let i = l2segments.length - 1; i >= 0; i--) {
+    const kind = l2segments[i][0];
+    let segment = l2segments[i].subarray(1);
+    /**
+     * Here might contain Timestamp updates and l1 block updates message here, but it is useless
+     * in finding tx hash here, so we just need to find tx related messages.
+     */
+    if (kind === BatchSegmentKindL2Message || kind === BatchSegmentKindL2MessageBrotli) {
+      if (kind === BatchSegmentKindL2MessageBrotli) {
+        segment = brotli.decompress(Buffer.from(segment));
+      }
+      l2Msgs.push(segment);
+    }
+    if (kind === BatchSegmentKindDelayedMessages) {
+      //MessageDelivered
+      l2Msgs.push(await getDelayedTx(currentDelayedMessageIndex));
+      currentDelayedMessageIndex -= 1;
+    }
+  }
 
   if (l2Msgs.length > MaxL2MessageSize) {
     throw Error('Message too large');
   }
 
   return l2Msgs;
-};
-
-const extractL2Msg = async (
-  l2segments: Uint8Array[],
-  delayedMessageIndex: number,
-  index: number,
-): Promise<[Uint8Array[], number]> => {
-  let l2Msgs: Uint8Array[] = [];
-  let currentDelayedMessageIndex = delayedMessageIndex;
-  if (index < l2segments.length - 1) {
-    [l2Msgs, currentDelayedMessageIndex] = await extractL2Msg(
-      l2segments,
-      currentDelayedMessageIndex,
-      index + 1,
-    );
-  }
-
-  const kind = l2segments[index][0];
-  let segment = l2segments[index].subarray(1);
-  /**
-   * Here might contain Timestamp updates and l1 block updates message here, but it is useless
-   * in finding tx hash here, so we just need to find tx related messages.
-   */
-  if (kind === BatchSegmentKindL2Message || kind === BatchSegmentKindL2MessageBrotli) {
-    if (kind === BatchSegmentKindL2MessageBrotli) {
-      segment = brotli.decompress(Buffer.from(segment));
-    }
-    l2Msgs.push(segment);
-  }
-  if (kind === BatchSegmentKindDelayedMessages) {
-    //TODO
-    //MessageDelivered
-    l2Msgs.push(await getDelayedTx(currentDelayedMessageIndex));
-    currentDelayedMessageIndex -= 1;
-  }
-  return [l2Msgs, currentDelayedMessageIndex];
 };
 
 export const decodeL2Msgs = (l2Msgs: Uint8Array): string[] => {
@@ -162,7 +144,7 @@ export const getRawData = async (sequencerTx: string): Promise<[Uint8Array, BigN
   const l2Network = await getL2Network(l2NetworkId);
   const txReceipt = await l1Provider.getTransactionReceipt(sequencerTx);
   const tx = await l1Provider.getTransaction(sequencerTx);
-  if (!tx || !txReceipt || (txReceipt && !txReceipt.status)) {
+  if (!tx || !txReceipt || !txReceipt.status) {
     throw new Error('No such a l1 transaction or transaction reverted');
   }
   if (tx.to.toLowerCase() !== l2Network.ethBridge.sequencerInbox.toLowerCase()) {
