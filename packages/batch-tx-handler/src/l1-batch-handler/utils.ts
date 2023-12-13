@@ -211,6 +211,7 @@ const getDACData = async (urls: string[], rawData: Uint8Array) => {
       break;
     } catch {
       if(i === urls.length - 1) {
+        console.log(`URL for one of the da node (${urls[i]}) is broken.`);
         throw new Error("All url seems broken, try it later or check your network connection.");
       }
       console.log(`URL for one of the da node (${urls[i]}) is broken, trying another one...`);
