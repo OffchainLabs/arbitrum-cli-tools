@@ -165,8 +165,8 @@ export const getRawData = async (sequencerTx: string): Promise<[Uint8Array, BigN
 };
 
 const processDASBatch = async (rawData: Uint8Array) => {
-  if(!process.env.NovaDacListUrl) {
-    throw new Error("You are calling anytrust dac while don't provide the dac list url")
+  if (!process.env.NovaDacListUrl) {
+    throw new Error("You are calling anytrust dac while don't provide the dac list url");
   }
   const req = await fetch(process.env.NovaDacListUrl);
   const urls = (await req.text()).split('\n');
@@ -182,19 +182,19 @@ const getDACData = async (urls: string[], rawData: Uint8Array) => {
   const dataHash = ethers.utils.hexlify(rawData.subarray(33, 65));
   let req;
   let base64Data;
-  for(let i = 0; i < urls.length; i++) {
+  for (let i = 0; i < urls.length; i++) {
     const requestUrl = urls[i] + `/get-by-hash/` + dataHash.substring(2);
     try {
       req = await fetch(requestUrl);
       base64Data = await req.json();
-      if(!base64Data["data"]) {
-        throw new Error("Empty data");
+      if (!base64Data['data']) {
+        throw new Error('Empty data');
       }
       break;
     } catch {
-      if(i === urls.length - 1) {
-        console.log(`URL for one of the da node (${urls[i]}) is broken.`);
-        throw new Error("All url seems broken, try it later or check your network connection.");
+      if (i === urls.length - 1) {
+        console.log('URL for one of the da node (${urls[i]}) is broken.');
+        throw new Error('All url seems broken, try it later or check your network connection.');
       }
       console.log(`URL for one of the da node (${urls[i]}) is broken, trying another one...`);
     }
