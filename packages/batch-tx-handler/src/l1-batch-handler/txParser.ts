@@ -53,5 +53,3 @@ export const parseRetryableTx = async (
     inboxData.data,
   );
 };
-
-// parseEthDepositMessage()
