@@ -147,7 +147,12 @@ export const getRawData = async (sequencerTx: string): Promise<[Uint8Array, BigN
   if (!tx || !txReceipt || !txReceipt.status) {
     throw new Error('No such a l1 transaction or transaction reverted');
   }
-  if (tx.to!.toLowerCase() !== l2Network.ethBridge.sequencerInbox.toLowerCase()) {
+
+  if (!tx.to) {
+    throw new Error('Transaction does not contain recipient address');
+  }
+
+  if (tx.to.toLowerCase() !== l2Network.ethBridge.sequencerInbox.toLowerCase()) {
     throw new Error('Not a sequencer inbox transaction');
   }
 
