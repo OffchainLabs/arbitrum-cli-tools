@@ -4,6 +4,8 @@ This repo has 2 way to get txns related to a single batch, one is `l1 batch hand
 
 ## l1 batch handler
 
+(Note: l1 batch handler only supports decode pre-eip4844 message)
+
 `l1 batch handler` is a simple demo of how to decompress and decode sequencer's calldata to get all related l2 message, but this way currently hasn't implemented `startBlock` and delayed tx found (Will support in the future).
 
 This demo will tell you how to use brotli to decompress the calldata and decode them to l2 msg.
