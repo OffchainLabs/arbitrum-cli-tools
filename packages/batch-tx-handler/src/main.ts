@@ -17,6 +17,7 @@ const main = async () => {
       if (!args.l1TxHash) {
         throw new Error('No l1TxHash! (You should add --l1TxHash)');
       }
+      console.log("**Note**: L1BatchHandler is deprecated and will no longer be updated, please refer to [go-batchhandler](https://github.com/OffchainLabs/go-batchhandler)");
       const provider = new providers.JsonRpcProvider(process.env.L1RPC);
       // yargs will read l1TxHash as number wrongly so we need add this convert.
       const txHash = args.l1TxHash?.toString();
