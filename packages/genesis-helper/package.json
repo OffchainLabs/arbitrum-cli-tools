@@ -8,8 +8,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "tsc --outDir dist && node ./dist/index.js",
-    "dev:low-level": "tsc --outDir dist && node ./dist/low_level.js"
+    "saveGenesis": "ts-node ./index.ts  saveGenesis",
+    "createRollup": "ts-node ./index.ts  createRollup"
   },
   "dependencies": {
     "@arbitrum/orbit-sdk": "^0.24.1",
