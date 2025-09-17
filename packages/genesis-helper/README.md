@@ -26,22 +26,6 @@ npm install
 yarn install
 ```
 
-## Environment Variables
-
-Create a `.env` file in the project root with the following variables:
-
-```env
-# Required
-DEPLOYER_PRIVATE_KEY=0x...  # Private key for the rollup deployer
-
-# Optional (will generate random keys if not provided)
-BATCH_POSTER_PRIVATE_KEY=0x...  # Private key for batch poster
-VALIDATOR_PRIVATE_KEY=0x...     # Private key for validator
-
-# Optional (uses default RPC if not provided)
-PARENT_CHAIN_RPC=https://sepolia-rollup.arbitrum.io/rpc
-```
-
 ## Usage
 
 ### 1. Generate Genesis Configuration
