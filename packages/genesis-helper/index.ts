@@ -127,6 +127,7 @@ async function createRollupEntry(genesisBlockHash: string) {
     throw parseErr;
   }
 
+  // Only need chainId and config from genesis.json
   const { config: loadedConfig } = loaded;
   const { chainId: loadedChainId } = loadedConfig;
 
