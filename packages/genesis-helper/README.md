@@ -104,7 +104,3 @@ Generated file with the following structure:
 ## How to get <genesis_block_hash>
 
 Please go to our [nitro repo](https://github.com/OffchainLabs/nitro) and compile [genesis-generator](https://github.com/OffchainLabs/nitro/tree/master/cmd/genesis-generator) to calculate.
-
-## License
-
-This project is part of the Arbitrum CLI Tools suite.
