@@ -226,7 +226,10 @@ async function createRollupEntry(args: {
     chainConfig: loadedConfig,
     genesisAssertionState: {
       globalState: {
-        bytes32Vals: [genesisBlockHash as `0x${string}`, ZERO_HASH as `0x${string}`],
+        bytes32Vals: [
+          genesisBlockHash as `0x${string}`,
+          args.sendRoot ? (args.sendRoot as `0x${string}`) : (ZERO_HASH as `0x${string}`),
+        ],
         u64Vals: [1n, 0n], // We set InboxPosition to 1 because the first block needs to consume the first message (Init Message)
       },
       machineStatus: 0,
