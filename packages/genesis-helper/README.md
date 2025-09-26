@@ -32,7 +32,10 @@ yarn install
 
 ```bash
 # Generate chain config and genesis.json
-node index.js saveGenesis
+yarn saveGenesis
+
+# Examples:
+yarn saveGenesis
 ```
 
 This command will:
@@ -40,12 +43,17 @@ This command will:
 - Create a chain configuration with Arbitrum parameters
 - Load account allocations from `alloc.json` (if present)
 - Generate `genesis.json` with proper formatting
+- Use custom gas price if provided
 
 ### 2. Create Rollup
 
 ```bash
 # Deploy rollup using genesis configuration, please see below section to see how to get genesis_block_hash
-node index.js createRollup <genesis_block_hash>
+yarn createRollup --blockhash <genesis_block_hash> --sendRoot <send_root_hash> [--gas-price <wei>]
+
+# Examples:
+yarn createRollup --blockhash 0x1234567890abcdef... --sendRoot 0xabcdef1234567890...
+yarn createRollup --blockhash 0x1234567890abcdef... --sendRoot 0xabcdef1234567890... --gas-price 20000000000
 ```
 
 This command will:
@@ -53,6 +61,8 @@ This command will:
 - Extract chain configuration and chain ID
 - Deploy the rollup contract to Arbitrum Sepolia
 - Configure batch posters and validators
+- Use the provided send root hash for genesis assertion state
+- Optionally use custom gas price (in wei) for the deployment transaction
 
 
 

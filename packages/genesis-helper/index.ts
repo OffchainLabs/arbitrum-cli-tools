@@ -6,10 +6,13 @@ import { createPublicClient, http } from 'viem';
 import {
   createRollup,
   createRollupPrepareDeploymentParamsConfig,
+  createRollupPrepareTransactionRequest,
+  createRollupPrepareTransactionReceipt,
   prepareChainConfig,
   ChainConfig,
 } from '@arbitrum/orbit-sdk';
 import { GENESIS_DEFAULTS, ZERO_HASH, GENESIS_KEY_ORDER, Genesis, AllocMap } from './tools/types';
+import { parseCommandLineArgs } from './tools/cli';
 import { stringifyTopLevelMixed } from './tools/format';
 import { sanitizePrivateKey, generateChainId } from '@arbitrum/orbit-sdk/utils';
 config();
@@ -54,6 +57,8 @@ function loadAlloc(): AllocMap {
     return {} as AllocMap;
   }
 
+  console.log('Successfully loaded alloc.json');
+
   let raw: Record<string, unknown>;
   try {
     raw = JSON.parse(content) as Record<string, unknown>;
@@ -79,16 +84,16 @@ function buildGenesis(chainConfig: ChainConfig, alloc: AllocMap): Genesis {
 }
 
 // Generate chain config
-function getChainConfig() {
-  const chainId = generateChainId();
+function getChainConfig(overrideChainId?: string, useAnyTrust?: boolean) {
+  const chainId = overrideChainId ? Number(overrideChainId) : generateChainId();
   const chainConfig = prepareChainConfig({
     chainId,
     arbitrum: {
       InitialChainOwner: deployer.address,
-      DataAvailabilityCommittee: true,
+      DataAvailabilityCommittee: useAnyTrust,
     },
   });
-  console.log(`Chain config: ${JSON.stringify(chainConfig)}`);
+
   return chainConfig;
 }
 
@@ -108,8 +113,92 @@ function saveGenesis(chainConfig: ChainConfig) {
   console.log(`Genesis saved to genesis.json`);
 }
 
+// Custom rollup creation function with gas price support
+async function createRollupWithCustomGasPrice(params: {
+  config: unknown;
+  batchPosters: readonly `0x${string}`[];
+  validators: readonly `0x${string}`[];
+  gasPrice?: string;
+}) {
+  const { config, batchPosters, validators, gasPrice } = params;
+
+  if (gasPrice) {
+    console.log(`Using custom gas price: ${gasPrice} wei`);
+
+    // Prepare the transaction request
+    const txRequest = await createRollupPrepareTransactionRequest({
+      params: { config: config as any, batchPosters, validators },
+      account: deployer.address,
+      publicClient: parentChainPublicClient,
+    });
+
+    // Override gas price - clean up the transaction object for signing
+    const customGasPriceTxRequest = {
+      chainId: txRequest.chainId,
+      to: txRequest.to,
+      value: txRequest.value || 0n,
+      data: txRequest.data,
+      gas: txRequest.gas,
+      gasPrice: BigInt(gasPrice),
+      nonce: txRequest.nonce,
+      type: 'legacy' as const,
+    };
+
+    console.log('Signing and sending rollup creation transaction with custom gas price...');
+
+    // Sign and send the transaction
+    const txHash = await parentChainPublicClient.sendRawTransaction({
+      serializedTransaction: await deployer.signTransaction(customGasPriceTxRequest),
+    });
+
+    console.log(`Transaction sent: ${txHash}`);
+
+    // Wait for transaction receipt
+    const txReceipt = await parentChainPublicClient.waitForTransactionReceipt({
+      hash: txHash,
+    });
+
+    console.log(`Transaction confirmed in block ${txReceipt.blockNumber}`);
+
+    // Process the receipt to get core contracts
+    const processedReceipt = createRollupPrepareTransactionReceipt(txReceipt);
+    const coreContracts = processedReceipt.getCoreContracts();
+
+    return {
+      transaction: { hash: txHash },
+      transactionReceipt: processedReceipt,
+      coreContracts,
+    };
+  } else {
+    // Use standard createRollup function
+    return await createRollup({
+      params: { config: config as any, batchPosters, validators },
+      account: deployer,
+      parentChainPublicClient,
+    });
+  }
+}
+
 // createRollup entry: read config and chainId from genesis.json then create a rollup
-async function createRollupEntry(genesisBlockHash: string) {
+async function createRollupEntry(args: {
+  genesisBlockHash?: string;
+  sendRoot?: string;
+  gasPrice?: string;
+}) {
+  const { genesisBlockHash, gasPrice } = args;
+
+  if (!genesisBlockHash) {
+    console.error('Genesis block hash is required. Use --blockhash flag to provide it.');
+    process.exitCode = 1;
+    return;
+  }
+
+  // if (!sendRoot) {
+  //   console.error('Send root flag is required. Use --sendRoot flag to enable it.');
+  //   process.exitCode = 1;
+  //   return;
+  // }
+
   let genesisContent: string;
   try {
     genesisContent = fs.readFileSync('genesis.json', { encoding: 'utf8' });
@@ -146,15 +235,17 @@ async function createRollupEntry(genesisBlockHash: string) {
   });
 
   try {
-    await createRollup({
-      params: {
-        config: createRollupConfig,
-        batchPosters: [batchPoster],
-        validators: [validator],
-      },
-      account: deployer,
-      parentChainPublicClient,
+    // Because createRollup in orbit-sdk doesn't support custom gas price, we need to use a custom method  createRollupWithCustomGasPrice
+    const result = await createRollupWithCustomGasPrice({
+      config: createRollupConfig,
+      batchPosters: [batchPoster],
+      validators: [validator],
+      gasPrice,
     });
+
+    console.log('Rollup created successfully!');
+    console.log(`Core contracts deployed at:`);
+    console.log(`- Rollup: ${result.coreContracts.rollup}`);
   } catch (error) {
     console.error(`Rollup creation failed with error: ${error}`);
     throw error;
@@ -165,20 +256,29 @@ async function createRollupEntry(genesisBlockHash: string) {
 // Entrypoint
 // -----------------------------
 async function main() {
+  const args = parseCommandLineArgs();
   const entrypoint = (process.argv[2] || process.env.ENTRYPOINT || 'saveGenesis').toString();
+
   switch (entrypoint) {
     case 'saveGenesis': {
-      const chainConfig = getChainConfig();
+      const chainConfig = getChainConfig(args.chainId, args.useAnyTrust);
       saveGenesis(chainConfig);
       break;
     }
     case 'createRollup': {
-      await createRollupEntry(process.argv[3]);
+      await createRollupEntry({
+        genesisBlockHash: args.blockhash,
+        sendRoot: args.sendRoot,
+        gasPrice: args.gasPrice,
+      });
       break;
     }
     default: {
+      console.error(`Unknown entrypoint: ${entrypoint}. Valid options: saveGenesis | createRollup`);
+      console.error('Usage:');
+      console.error('  node index.js saveGenesis');
       console.error(
-        `Unknown entrypoint: ${entrypoint}. Valid options: saveGenesis | createRollup\nUsage: node index.js <entrypoint>`,
+        '  node index.js createRollup --blockhash <hash> --sendRoot <hash> [--gas-price <wei>]',
       );
       process.exitCode = 1;
     }
