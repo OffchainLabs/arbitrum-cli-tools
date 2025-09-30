@@ -2,7 +2,7 @@ import fs from 'fs';
 import { config } from 'dotenv';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { arbitrumSepolia } from 'viem/chains';
-import { createPublicClient, http } from 'viem';
+import { concat, createPublicClient, http, keccak256 } from 'viem';
 import {
   createRollup,
   createRollupPrepareDeploymentParamsConfig,
@@ -75,6 +75,126 @@ function loadAlloc(): AllocMap {
   return normalized;
 }
 
+// Read predeploys.json from current working directory and compute the needed information (e.g. immutable variables)
+function loadPredeploys(chainConfig: ChainConfig): AllocMap {
+  // Read predeploys file
+  let predeploysFileContents = '{}';
+  try {
+    predeploysFileContents = fs.readFileSync('predeploys.json', { encoding: 'utf8' });
+  } catch (err) {
+    return {} as AllocMap;
+  }
+
+  // Parse contents
+  let predeploysJson: Record<string, unknown>;
+  try {
+    predeploysJson = JSON.parse(predeploysFileContents) as Record<string, unknown>;
+  } catch (parseErr) {
+    console.error('predeploys.json is not a valid JSON.');
+    throw parseErr;
+  }
+
+  // Create alloc object with its contents
+  type PredeployContract = {
+    address: `0x${string}`;
+    bytecode: `0x${string}`;
+    storage?: Record<`0x${string}`, `0x${string}`>;
+    immutableReferences?: Record<
+      string,
+      {
+        references: { start: number; length: number }[];
+        value: string;
+        extraInformation?: `0x${string}`[];
+      }
+    >;
+  };
+
+  // Create alloc entry
+  const predeploysAlloc: AllocMap = {};
+  for (const [, value] of Object.entries(predeploysJson)) {
+    const predeploy = value as PredeployContract;
+    const contractAddress = (
+      predeploy.address.startsWith('0x') ? predeploy.address : `0x${predeploy.address}`
+    ) as `0x${string}`;
+
+    // Initial properties
+    const contractAlloc = {
+      balance: '',
+      nonce: '1',
+      code: predeploy.bytecode,
+      storage: predeploy.storage ? predeploy.storage : {},
+    };
+
+    // Compute immutable variables and add them to bytecode
+    // Note: for now we only handle 2 cases: chainId and eip712DomainSeparator
+    // More cases can be added if needed, but it might make sense to limit this list to the
+    // cases where the immutable variable depends on something that is different between chains
+    // (e.g. chainId)
+    if (predeploy.immutableReferences) {
+      let bytecode = predeploy.bytecode;
+      for (const [, immutablesInformation] of Object.entries(predeploy.immutableReferences)) {
+        for (const reference of immutablesInformation.references) {
+          const { start, length } = reference;
+
+          // Compute value
+          let immutableValue: string;
+          switch (immutablesInformation.value) {
+            case 'chainId':
+              immutableValue = chainConfig.chainId.toString(16);
+              break;
+
+            case 'eip712DomainSeparator':
+              // Note: `extraInformation` can have multiple values, depending on the version used:
+              //
+              // 2 values (e.g. Permit2):
+              //  - Ref: https://github.com/Uniswap/permit2/blob/main/src/EIP712.sol#L34
+              //  - Values: [hashedEIP712DomainType, hashedContractName]
+              //
+              // 3 values (e.g. Entrypoint v0.8.0):
+              //  - Ref: https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.1.0/contracts/utils/cryptography/EIP712.sol#L89
+              //  - Values: [hashedEIP712DomainType, hashedContractName, hashedContractVersion]
+              const domainValues = immutablesInformation.extraInformation
+                ? immutablesInformation.extraInformation
+                : [];
+
+              // Add the chain id padded to 32 bytes
+              domainValues.push(`0x${chainConfig.chainId.toString(16).padStart(64, '0')}`);
+
+              // Add the contract address padded to 32 bytes
+              domainValues.push(`0x${contractAddress.slice(2).padStart(64, '0')}`);
+
+              // Compute the domain separator
+              const domainSeparator = keccak256(concat(domainValues));
+
+              immutableValue = domainSeparator;
+              break;
+
+            default:
+              immutableValue = immutablesInformation.value;
+              break;
+          }
+
+          // Pad value to the left with zeros to fit the length
+          const value = immutableValue.startsWith('0x')
+            ? immutableValue.slice(2).padStart(length * 2, '0')
+            : immutableValue.padStart(length * 2, '0');
+
+          // Replace in bytecode
+          bytecode =
+            bytecode.slice(0, 2 + start * 2) + value + bytecode.slice(2 + (start + length) * 2);
+        }
+      }
+
+      // Update bytecode in alloc
+      contractAlloc.code = bytecode;
+    }
+
+    predeploysAlloc[contractAddress] = contractAlloc;
+  }
+
+  return predeploysAlloc;
+}
+
 function buildGenesis(chainConfig: ChainConfig, alloc: AllocMap): Genesis {
   return {
     ...GENESIS_DEFAULTS,
@@ -100,6 +220,8 @@ function getChainConfig(overrideChainId?: string, useAnyTrust?: boolean) {
 // Generate genesis
 function saveGenesis(chainConfig: ChainConfig) {
   const alloc = loadAlloc();
+  const predeploysAlloc = loadPredeploys(chainConfig);
+  Object.assign(alloc, predeploysAlloc);
   const genesis = buildGenesis(chainConfig, alloc);
 
   // Only the value of `config` is compact; other top-level keys use 2-space pretty print.
