@@ -18,4 +18,3 @@ yarn install
 
 - [l1-batch-handler](./packages/batch-tx-handler/README.md#l1-batch-handler)
 - [l2-precompile-handler](./packages/batch-tx-handler/README.md#l2-precompile-handler)
-- [genesis-helper](./packages/genesis-helper/)
